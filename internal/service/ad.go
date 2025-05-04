@@ -40,6 +40,27 @@ func (s *AdService) GetWinningAds(q AdQuery) ([]*model.Ad, error) {
 	if err != nil {
 		return nil, err
 	}
+	ads, err := s.winningAdCalculator(q, lineItems)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, ad := range ads {
+		ids = append(ids, ad.ID)
+	}
+	s.log.Infow("winning ads selected",
+		"placement", q.Placement,
+		"category", q.Category,
+		"keyword", q.Keyword,
+		"limit", q.Limit,
+		"candidates", len(lineItems),
+		"returned", len(ads),
+		"ad_ids", ids,
+	)
+	return ads, nil
+}
+
+func (s *AdService) winningAdCalculator(q AdQuery, lineItems []*model.LineItem) ([]*model.Ad, error) {
 	if len(lineItems) == 0 {
 		return []*model.Ad{}, nil
 	}
