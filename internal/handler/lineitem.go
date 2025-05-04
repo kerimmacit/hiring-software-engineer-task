@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"errors"
+	"github.com/go-playground/validator/v10"
 	"sweng-task/internal/model"
+	"sweng-task/internal/validation"
 
 	"sweng-task/internal/service"
 
@@ -11,15 +14,17 @@ import (
 
 // LineItemHandler handles HTTP requests related to line items
 type LineItemHandler struct {
-	service *service.LineItemService
-	log     *zap.SugaredLogger
+	service  *service.LineItemService
+	log      *zap.SugaredLogger
+	validate *validator.Validate
 }
 
 // NewLineItemHandler creates a new LineItemHandler
-func NewLineItemHandler(service *service.LineItemService, log *zap.SugaredLogger) *LineItemHandler {
+func NewLineItemHandler(service *service.LineItemService, validate *validator.Validate, log *zap.SugaredLogger) *LineItemHandler {
 	return &LineItemHandler{
-		service: service,
-		log:     log,
+		service:  service,
+		validate: validate,
+		log:      log,
 	}
 }
 
@@ -33,8 +38,13 @@ func (h *LineItemHandler) Create(c *fiber.Ctx) error {
 			"details": err.Error(),
 		})
 	}
-
-	// Note: Validation logic should be implemented by the candidate
+	if err := validation.Validate(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"code":    fiber.StatusBadRequest,
+			"message": "Invalid request body",
+			"details": err.Error(),
+		})
+	}
 
 	lineItem, err := h.service.Create(input)
 	if err != nil {
@@ -60,7 +70,7 @@ func (h *LineItemHandler) GetByID(c *fiber.Ctx) error {
 
 	lineItem, err := h.service.GetByID(id)
 	if err != nil {
-		if err == service.ErrLineItemNotFound {
+		if errors.Is(err, service.ErrLineItemNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"code":    fiber.StatusNotFound,
 				"message": "Line item not found",

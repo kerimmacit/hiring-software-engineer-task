@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sweng-task/internal/validation"
 	"syscall"
 
 	"sweng-task/internal/config"
@@ -39,6 +40,8 @@ func main() {
 		"server_port", cfg.Server.Port,
 	)
 
+	validate := validation.GetBaseValidator()
+
 	// Initialize services
 	lineItemService := service.NewLineItemService(log)
 	adService := service.NewAdService(lineItemService, log)
@@ -63,7 +66,7 @@ func main() {
 	api := app.Group("/api/v1")
 
 	// Line Item endpoints
-	lineItemHandler := handler.NewLineItemHandler(lineItemService, log)
+	lineItemHandler := handler.NewLineItemHandler(lineItemService, validate, log)
 	api.Post("/lineitems", lineItemHandler.Create)
 	api.Get("/lineitems", lineItemHandler.GetAll)
 	api.Get("/lineitems/:id", lineItemHandler.GetByID)
