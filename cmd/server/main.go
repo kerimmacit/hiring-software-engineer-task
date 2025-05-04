@@ -41,7 +41,8 @@ func main() {
 
 	// Initialize services
 	lineItemService := service.NewLineItemService(log)
-	// Note: AdService implementation is left for the candidate
+	adService := service.NewAdService(lineItemService, log)
+	trackingService := service.NewTrackingService(log)
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{
@@ -68,10 +69,12 @@ func main() {
 	api.Get("/lineitems/:id", lineItemHandler.GetByID)
 
 	// Ad endpoints - TO BE IMPLEMENTED BY CANDIDATE
-	// api.Get("/ads", adHandler.GetWinningAds)
+	adHandler := handler.NewAdHandler(adService, log)
+	api.Get("/ads", adHandler.GetWinningAds)
 
 	// Tracking endpoint - TO BE IMPLEMENTED BY CANDIDATE
-	// api.Post("/tracking", trackingHandler.TrackEvent)
+	trackingHandler := handler.NewTrackingHandler(trackingService, log)
+	api.Post("/tracking", trackingHandler.TrackEvent)
 
 	// Start server
 	go func() {
