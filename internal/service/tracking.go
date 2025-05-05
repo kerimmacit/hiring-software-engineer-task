@@ -1,30 +1,37 @@
 package service
 
 import (
-	"sync"
-
 	"go.uber.org/zap"
 
 	"sweng-task/internal/model"
+	"sweng-task/internal/repo"
 )
 
 type TrackingService struct {
-	events []*model.TrackingEvent
-	mu     sync.RWMutex
-	log    *zap.SugaredLogger
+	repo repo.TrackingEventRepository
+	log  *zap.SugaredLogger
 }
 
-func NewTrackingService(log *zap.SugaredLogger) *TrackingService {
-	return &TrackingService{log: log}
+func NewTrackingService(repo repo.TrackingEventRepository, log *zap.SugaredLogger) *TrackingService {
+	return &TrackingService{
+		repo: repo,
+		log:  log,
+	}
 }
 
-func (s *TrackingService) Track(event *model.TrackingEvent) {
-	s.mu.Lock()
-	s.events = append(s.events, event)
-	s.mu.Unlock()
+// Track is uses repository level to persist event, and logs it.
+// Suggestion: We can add async to this stage, and let TrackingService.Track to be producer,
+// while consumers will persist events.
+func (s *TrackingService) Track(event *model.TrackingEvent) error {
+	// Future: Budget consumption logic should be added here
+	err := s.repo.CreateTrackingEvent(event)
+	if err != nil {
+		return err
+	}
 	s.log.Infow("tracking event stored",
 		"type", event.EventType,
 		"line_item", event.LineItemID,
 		"placement", event.Placement,
 	)
+	return nil
 }

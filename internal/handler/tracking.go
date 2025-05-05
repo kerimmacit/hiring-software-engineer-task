@@ -31,6 +31,14 @@ func (h *TrackingHandler) TrackEvent(c *fiber.Ctx) error {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
-	h.service.Track(&event)
+	err := h.service.Track(&event)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).
+			JSON(fiber.Map{
+				"code":    fiber.StatusInternalServerError,
+				"message": "failed to consume tracking event",
+				"details": err.Error(),
+			})
+	}
 	return c.JSON(fiber.Map{"success": true})
 }

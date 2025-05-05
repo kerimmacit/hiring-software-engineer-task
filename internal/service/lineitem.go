@@ -1,41 +1,32 @@
 package service
 
 import (
-	"errors"
-	"sync"
 	"time"
 
+	"sweng-task/internal/domain_errors"
 	"sweng-task/internal/model"
+	"sweng-task/internal/repo"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
-// Errors
-var (
-	ErrLineItemNotFound = errors.New("line item not found")
-)
-
 // LineItemService provides operations for line items
 type LineItemService struct {
-	items map[string]*model.LineItem
-	mu    sync.RWMutex
-	log   *zap.SugaredLogger
+	repo repo.LineItemRepository
+	log  *zap.SugaredLogger
 }
 
 // NewLineItemService creates a new LineItemService
-func NewLineItemService(log *zap.SugaredLogger) *LineItemService {
+func NewLineItemService(repo repo.LineItemRepository, log *zap.SugaredLogger) *LineItemService {
 	return &LineItemService{
-		items: make(map[string]*model.LineItem),
-		log:   log,
+		repo: repo,
+		log:  log,
 	}
 }
 
 // Create creates a new line item
 func (s *LineItemService) Create(item model.LineItemCreate) (*model.LineItem, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	now := time.Now()
 
 	lineItem := &model.LineItem{
@@ -52,66 +43,49 @@ func (s *LineItemService) Create(item model.LineItemCreate) (*model.LineItem, er
 		UpdatedAt:    now,
 	}
 
-	s.items[lineItem.ID] = lineItem
+	err := s.repo.CreateLineItem(lineItem)
+	if err != nil {
+		return nil, err
+	}
 	s.log.Infow("Line item created",
 		"id", lineItem.ID,
 		"name", lineItem.Name,
 		"advertiser_id", lineItem.AdvertiserID,
 		"placement", lineItem.Placement,
 	)
-
 	return lineItem, nil
 }
 
 // GetByID retrieves a line item by ID
 func (s *LineItemService) GetByID(id string) (*model.LineItem, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	item, exists := s.items[id]
-	if !exists {
-		return nil, ErrLineItemNotFound
+	lineItem, err := s.repo.GetLineItemById(id)
+	if err != nil {
+		return nil, err
 	}
-
-	return item, nil
+	if lineItem == nil {
+		return nil, domain_errors.ErrLineItemNotFound
+	}
+	return lineItem, nil
 }
 
 // GetAll retrieves all line items, optionally filtered by advertiser ID and placement
 func (s *LineItemService) GetAll(advertiserID, placement string) ([]*model.LineItem, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var result []*model.LineItem
-
-	for _, item := range s.items {
-		if advertiserID != "" && item.AdvertiserID != advertiserID {
-			continue
-		}
-
-		if placement != "" && item.Placement != placement {
-			continue
-		}
-
-		result = append(result, item)
-	}
-
-	return result, nil
+	return s.repo.GetLineItems(repo.GetLineItemsFilter{AdvertiserID: advertiserID, Placement: placement})
 }
 
 // FindMatchingLineItems finds line items matching the given placement and filters
 // This method will be used by the AdService when implementing the ad selection logic
 func (s *LineItemService) FindMatchingLineItems(placement string, category, keyword string) ([]*model.LineItem, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	lineItems, err := s.repo.GetLineItems(repo.GetLineItemsFilter{
+		Placement: placement,
+		Status:    model.LineItemStatusActive,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	var result []*model.LineItem
-
-	for _, item := range s.items {
-		// Skip items not matching the placement or not active
-		if item.Placement != placement || item.Status != model.LineItemStatusActive {
-			continue
-		}
-
+	result := make([]*model.LineItem, 0)
+	for _, item := range lineItems {
 		// Apply category filter if specified
 		if category != "" {
 			categoryFound := false

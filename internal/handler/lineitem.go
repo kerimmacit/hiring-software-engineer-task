@@ -2,14 +2,15 @@ package handler
 
 import (
 	"errors"
+
 	"github.com/go-playground/validator/v10"
-	"sweng-task/internal/model"
-	"sweng-task/internal/validation"
-
-	"sweng-task/internal/service"
-
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
+
+	"sweng-task/internal/domain_errors"
+	"sweng-task/internal/model"
+	"sweng-task/internal/service"
+	"sweng-task/internal/validation"
 )
 
 // LineItemHandler handles HTTP requests related to line items
@@ -70,7 +71,7 @@ func (h *LineItemHandler) GetByID(c *fiber.Ctx) error {
 
 	lineItem, err := h.service.GetByID(id)
 	if err != nil {
-		if errors.Is(err, service.ErrLineItemNotFound) {
+		if errors.Is(err, domain_errors.ErrLineItemNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"code":    fiber.StatusNotFound,
 				"message": "Line item not found",

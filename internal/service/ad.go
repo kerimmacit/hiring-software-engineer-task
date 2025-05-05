@@ -1,29 +1,40 @@
 package service
 
 import (
-	"go.uber.org/zap"
+	"errors"
 	"slices"
 	"sort"
 
+	"go.uber.org/zap"
+
+	"sweng-task/internal/domain_errors"
 	"sweng-task/internal/model"
+	"sweng-task/internal/repo"
 )
+
+// relevancy scoring helper struct
+type scoredItem struct {
+	*model.LineItem
+	score float64
+}
 
 // Scoring Weights
 const (
-	wCategory = 0.4
-	wKeyword  = 0.4
-	wBid      = 0.2
+	wCategory = 0.3
+	wKeyword  = 0.2
 )
 
 // AdService selects winning ads for placement
 type AdService struct {
 	lineItemService *LineItemService
+	lineItemRepo    repo.LineItemRepository
 	log             *zap.SugaredLogger
 }
 
-func NewAdService(lineItemService *LineItemService, log *zap.SugaredLogger) *AdService {
+func NewAdService(lineItemRepo repo.LineItemRepository, lineItemService *LineItemService, log *zap.SugaredLogger) *AdService {
 	return &AdService{
 		lineItemService: lineItemService,
+		lineItemRepo:    lineItemRepo,
 		log:             log,
 	}
 }
@@ -40,9 +51,39 @@ func (s *AdService) GetWinningAds(q AdQuery) ([]*model.Ad, error) {
 	if err != nil {
 		return nil, err
 	}
-	ads := s.winningAdCalculator(q, lineItems)
+	lineItems = s.winningAdCalculator(q, lineItems)
+
+	var result []*model.Ad
+	for _, lineItem := range lineItems {
+		if lineItem.Budget < lineItem.Bid {
+			continue
+		}
+		updatedLineItem, err := s.lineItemRepo.UpdateBudget(lineItem, lineItem.Budget-lineItem.Bid)
+		if err != nil || updatedLineItem == nil {
+			if !errors.Is(err, domain_errors.ErrLineItemAlreadyUpdated) {
+				s.log.Warnw("line item is already updated before budget spending",
+					"id", lineItem.ID)
+			} else {
+				s.log.Errorw("error in updating line item budget spending",
+					"id", lineItem.ID)
+			}
+			continue
+		}
+		result = append(result, &model.Ad{
+			ID:           updatedLineItem.ID,
+			Name:         updatedLineItem.Name,
+			AdvertiserID: updatedLineItem.AdvertiserID,
+			Bid:          updatedLineItem.Bid,
+			Placement:    updatedLineItem.Placement,
+			ServeURL:     serveUrlGenerator(updatedLineItem),
+		})
+		if len(result) >= q.Limit {
+			break
+		}
+	}
+
 	var ids []string
-	for _, ad := range ads {
+	for _, ad := range result {
 		ids = append(ids, ad.ID)
 	}
 	s.log.Infow("winning ads selected",
@@ -51,61 +92,43 @@ func (s *AdService) GetWinningAds(q AdQuery) ([]*model.Ad, error) {
 		"keyword", q.Keyword,
 		"limit", q.Limit,
 		"candidates", len(lineItems),
-		"returned", len(ads),
+		"returned", len(result),
 		"ad_ids", ids,
 	)
-	return ads, nil
+	return result, nil
 }
 
-func (s *AdService) winningAdCalculator(q AdQuery, lineItems []*model.LineItem) []*model.Ad {
+func (s *AdService) winningAdCalculator(q AdQuery, lineItems []*model.LineItem) []*model.LineItem {
 	if len(lineItems) == 0 {
-		return []*model.Ad{}
+		return []*model.LineItem{}
 	}
 
-	maxBid := lineItems[0].Bid
-	for _, li := range lineItems {
-		if li.Bid > maxBid {
-			maxBid = li.Bid
+	scoredItems := make([]scoredItem, len(lineItems))
+	for i, lineItem := range lineItems {
+		scoredItems[i] = scoredItem{
+			LineItem: lineItem,
+			score:    lineItem.Bid * relevancyScore(lineItem, q),
 		}
-	}
-
-	scores := make([]float64, len(lineItems))
-	for i, li := range lineItems {
-		var score float64
-		if slices.Contains(li.Categories, q.Category) {
-			score += wCategory
-		}
-		if slices.Contains(li.Keywords, q.Keyword) {
-			score += wKeyword
-		}
-		if maxBid > 0 {
-			score = (li.Bid / maxBid) * wBid
-		}
-		scores[i] = score
 	}
 
 	// Sort line items by descending score
 	sort.Slice(lineItems, func(i, j int) bool {
-		return scores[i] > scores[j]
+		return scoredItems[i].score > scoredItems[j].score
 	})
-
-	var result []*model.Ad
-	for _, li := range lineItems {
-		result = append(result, &model.Ad{
-			ID:           li.ID,
-			Name:         li.Name,
-			AdvertiserID: li.AdvertiserID,
-			Bid:          li.Bid,
-			Placement:    li.Placement,
-			ServeURL:     serveUrlGenerator(li),
-		})
-		if len(result) >= q.Limit {
-			break
-		}
-	}
-	return result
+	return lineItems
 }
 
 func serveUrlGenerator(li *model.LineItem) string {
 	return "/ad/serve/" + li.ID
+}
+
+func relevancyScore(lineItem *model.LineItem, q AdQuery) float64 {
+	score := 1.0
+	if q.Category != "" && slices.Contains(lineItem.Categories, q.Category) {
+		score += wCategory
+	}
+	if q.Keyword != "" && slices.Contains(lineItem.Keywords, q.Keyword) {
+		score += wKeyword
+	}
+	return score
 }

@@ -21,7 +21,7 @@ A small Go project that returns the best ad for a placement and records basic tr
 
 This solution will be scalable, reliable, and performant
 
-- TODO:
+Also introduced repository level with interface, in order to make it easy to integrate new storage solution
 
 ## Scaling Considerations
 
@@ -34,7 +34,7 @@ This solution will be scalable, reliable, and performant
 
 **2. What bottlenecks do you anticipate and how would you address them?**
 
-- Tracking write spikes: Memory buffer + Kafka
+- Tracking event write spikes: Memory buffer + Kafka
 - Autoscaling for request spikes
 
 **3. How would you design the system to ensure high availability and fault tolerance?**
@@ -53,6 +53,12 @@ This solution will be scalable, reliable, and performant
 - Cache invalidation logic
 - Cold Start: cache should be filled when startup
 
-## Testing
+## Future Improvements
 
-- Only added unit tests on relevancy scoring for simplicity. More and various tests can be added
+**Test**: Only added unit tests on relevancy scoring for simplicity. More and various tests can be added
+
+**Error**: Instead of generic error, specific error type can be introduced
+
+**UUID**: In order to prevent any sort of duplication in line item creation, uuid should be created from requester side and used as a dedupe key in server side
+
+**Budget Usage**: We might use provision logic while winning the ads, and consume the budget when there are tracking events

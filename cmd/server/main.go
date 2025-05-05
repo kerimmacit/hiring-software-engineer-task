@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sweng-task/internal/validation"
 	"syscall"
 
 	"sweng-task/internal/config"
 	"sweng-task/internal/handler"
+	"sweng-task/internal/repo"
 	"sweng-task/internal/service"
+	"sweng-task/internal/validation"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -42,10 +43,14 @@ func main() {
 
 	validate := validation.GetBaseValidator()
 
+	// Initialize repositories
+	trackingRepo := repo.NewTrackingEventRepository(log)
+	lineItemRepo := repo.NewLineItemRepository(log)
+
 	// Initialize services
-	lineItemService := service.NewLineItemService(log)
-	adService := service.NewAdService(lineItemService, log)
-	trackingService := service.NewTrackingService(log)
+	lineItemService := service.NewLineItemService(lineItemRepo, log)
+	adService := service.NewAdService(lineItemRepo, lineItemService, log)
+	trackingService := service.NewTrackingService(trackingRepo, log)
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{
