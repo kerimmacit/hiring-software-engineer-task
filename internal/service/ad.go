@@ -40,10 +40,7 @@ func (s *AdService) GetWinningAds(q AdQuery) ([]*model.Ad, error) {
 	if err != nil {
 		return nil, err
 	}
-	ads, err := s.winningAdCalculator(q, lineItems)
-	if err != nil {
-		return nil, err
-	}
+	ads := s.winningAdCalculator(q, lineItems)
 	var ids []string
 	for _, ad := range ads {
 		ids = append(ids, ad.ID)
@@ -60,9 +57,9 @@ func (s *AdService) GetWinningAds(q AdQuery) ([]*model.Ad, error) {
 	return ads, nil
 }
 
-func (s *AdService) winningAdCalculator(q AdQuery, lineItems []*model.LineItem) ([]*model.Ad, error) {
+func (s *AdService) winningAdCalculator(q AdQuery, lineItems []*model.LineItem) []*model.Ad {
 	if len(lineItems) == 0 {
-		return []*model.Ad{}, nil
+		return []*model.Ad{}
 	}
 
 	maxBid := lineItems[0].Bid
@@ -100,11 +97,15 @@ func (s *AdService) winningAdCalculator(q AdQuery, lineItems []*model.LineItem) 
 			AdvertiserID: li.AdvertiserID,
 			Bid:          li.Bid,
 			Placement:    li.Placement,
-			ServeURL:     "/ad/serve/" + li.ID,
+			ServeURL:     serveUrlGenerator(li),
 		})
 		if len(result) >= q.Limit {
 			break
 		}
 	}
-	return result, nil
+	return result
+}
+
+func serveUrlGenerator(li *model.LineItem) string {
+	return "/ad/serve/" + li.ID
 }
